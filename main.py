@@ -3,10 +3,20 @@ import time
 import RPi.GPIO as GPIO
 
 from ultrasonic_sensor import UltrasonicSensor
+from color_sensor import ColorSensor
+from imu import IMU
+from motors import DCMotor, Servo
 
+SWITCH = None
 ULTRASONIC_SENSORS: List[UltrasonicSensor] = []
+COLOR_SENSORS: List[ColorSensor] = []
+MOTOR: DCMotor = None
+SERVO: Servo = None
+IMU_SENSOR: IMU = None
+
 
 def setup() -> None:
+    global MOTOR
 
     # Using phyiscal board pin out reference
     GPIO.setmode(GPIO.BOARD)
@@ -15,24 +25,18 @@ def setup() -> None:
     # We'll figure out the pins later on
 
     ULTRASONIC_SENSORS.extend([
-        UltrasonicSensor(16, 18),  # front
-        UltrasonicSensor(13, 15),  # back
-        UltrasonicSensor(33, 35),  # left
-        UltrasonicSensor(29, 31)   # right
+        # UltrasonicSensor(16, 18),  # front
     ])
+
+    MOTOR = DCMotor(11, 13)
 
 
 def main() -> None:
     # Input -> process -> output
     # inputs are ultasonic, colour sensor, imu, camera
 
-    front_distance = ULTRASONIC_SENSORS[0].measure()
-    back_distance = ULTRASONIC_SENSORS[1].measure()
-    right_distance = ULTRASONIC_SENSORS[2].measure()
-    left_distance = ULTRASONIC_SENSORS[3].measure()
-
-    print(front_distance)
-    time.sleep(1)
+    MOTOR.forward()
+    MOTOR.start(20)
 
 
 if __name__ == "__main__":
