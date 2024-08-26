@@ -1,6 +1,7 @@
 from typing import List
 import time
 import RPi.GPIO as GPIO
+from motors import DCMotor
 
 from ultrasonic_sensor import UltrasonicSensor
 from color_sensor import ColorSensor
