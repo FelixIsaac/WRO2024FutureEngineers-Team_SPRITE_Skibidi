@@ -3,14 +3,7 @@ import numpy as np
 from smbus2 import SMBus
 from numpy import eye, zeros
 from filterpy.kalman import KalmanFilter
-
-# Compass registers
-CONFIG_A = 0x00
-CONFIG_B = 0x01
-MODE = 0x02
-X_MSB = 0x03
-Z_MSB = 0x05
-Y_MSB = 0x07
+import math
 
 PWR_MGMT_1 = 0x6B
 ACCEL_XOUT_H = 0x3B
@@ -27,46 +20,72 @@ class IMU:
         self.address = address
         self.bus = 1
 
+        # Yaw angle to maintain
+        self.current_yaw = 0.0
+        self.target_yaw = 0.0
+
         # Bias correction variables
         self.gyro_bias = np.zeros(3)
-        # self.calibrate_gyroscope()
+        self.accel_bias = np.zeros(3)
 
         # Initialize Kalman Filter
-        self.kf = KalmanFilter(dim_x=6, dim_z=6)
+        self.kf = KalmanFilter(dim_x=4, dim_z=6)
 
-        # Set initial state and covariance
-        self.kf.x = zeros(6)
-        self.kf.P = eye(6)
+        # State: [roll, pitch, yaw, yaw_rate]
+        self.kf.x = zeros(4)
+        self.kf.P = eye(4) * 1000  # Large initial uncertainty
 
-        # Set state transition matrix F, observation matrix H, process noise covariance Q, and measurement noise covariance R
-        self.kf.F = eye(6)
-        self.kf.H = eye(6)
-        self.kf.Q *= 0.01
-        self.kf.R *= 0.1
+        # State transition matrix
+        self.kf.F = np.array([
+            [1, 0, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1]
+        ])
+
+        # Measurement function
+        self.kf.H = np.array([
+            [1, 0, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0]
+        ])
+
+        # Measurement noise covariance
+        self.kf.R = np.eye(6) * 0.1
+
+        # Process noise covariance
+        self.kf.Q = np.eye(4) * 0.01
 
         with SMBus(self.bus) as bus:
+            # Wake up the MPU6050
             bus.write_byte_data(self.address, PWR_MGMT_1, 0)
 
-            bus.write_byte_data(self.address, CONFIG_A, 0x70)
-            bus.write_byte_data(self.address, CONFIG_B, 0x20)
-            bus.write_byte_data(self.address, MODE, 0x00)
+        # self.calibrate()
 
-    def calibrate_gyroscope(self, num_samples=1000):
-        print("Calibrating gyroscope...")
+    def calibrate(self, num_samples=1000):
+        print("Calibrating IMU...")
         gyro_sum = np.zeros(3)
+        accel_sum = np.zeros(3)
 
         for _ in range(num_samples):
-            gyro_sum += np.array([
-                self.read_word(GYRO_XOUT_H),
-                self.read_word(GYRO_YOUT_H),
-                self.read_word(GYRO_ZOUT_H)
-            ])
-            time.sleep(0.01)  # Adjust based on your sample rate
+            data = self.read_raw_data()
+            gyro_sum += np.array(data['gyro'])
+            accel_sum += np.array(data['accel'])
+            time.sleep(0.01)
 
         self.gyro_bias = gyro_sum / num_samples
+        self.accel_bias = accel_sum / num_samples - np.array([0, 0, 1])  # Assuming z-axis is vertical
         print(f"Gyro bias: {self.gyro_bias}")
+        print(f"Accel bias: {self.accel_bias}")
 
-    def read_word(self, reg: hex) -> int:
+        self.target_yaw = 0  # Set initial target yaw to 0
+        self.current_yaw = 0
+        print(f"Calibration complete. Target yaw set to {self.target_yaw}")
+
+    def read_word(self, reg: hex = 0) -> int:
         with SMBus(self.bus) as bus:
             high = bus.read_byte_data(self.address, reg)
             low = bus.read_byte_data(self.address, reg + 1)
@@ -78,72 +97,53 @@ class IMU:
 
             return value
 
-    def read_data(self, reg: hex = 0) -> dict:
+    def read_raw_data(self) -> dict:
         accel_conversion = 9.80665 / 16384.0
-        gyro_conversion = 1.0 / 131.0
+        gyro_conversion = np.pi / (180 * 131.0)  # Convert to radians/s
 
-        accel_x, accel_y, accel_z = (
-            self.read_word(reg + ACCEL_XOUT_H) * accel_conversion,
-            self.read_word(reg + ACCEL_YOUT_H) * accel_conversion,
-            self.read_word(reg + ACCEL_ZOUT_H) * accel_conversion
-        )
+        accel = np.array([
+            self.read_word(ACCEL_XOUT_H) * accel_conversion,
+            self.read_word(ACCEL_YOUT_H) * accel_conversion,
+            self.read_word(ACCEL_ZOUT_H) * accel_conversion
+        ]) - self.accel_bias
 
-        gyro_x, gyro_y, gyro_z = (
-            self.read_word(reg + GYRO_XOUT_H) * gyro_conversion - self.gyro_bias[0],
-            self.read_word(reg + GYRO_YOUT_H) * gyro_conversion - self.gyro_bias[1],
-            self.read_word(reg + GYRO_ZOUT_H) * gyro_conversion - self.gyro_bias[2]
-        )
-
-        self.kf.predict()
-        self.kf.update([accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z])
-        filtered_data = self.kf.x
-
-        filtered_accel = filtered_data[:3]
-        filtered_gyro = filtered_data[3:]
+        gyro = np.array([
+            self.read_word(GYRO_XOUT_H) * gyro_conversion,
+            self.read_word(GYRO_YOUT_H) * gyro_conversion,
+            self.read_word(GYRO_ZOUT_H) * gyro_conversion
+        ]) - self.gyro_bias
 
         return {
-            'accel': filtered_accel,
-            'gyro': filtered_gyro
+            'accel': accel,
+            'gyro': gyro
         }
 
-    def current_heading(self) -> np.array:
-        """Reads magnetometer values and calculates the heading."""
-        x, y, z =  self.read_data()['gyro']
-        print(x, y ,z)
+    def update(self, dt):
+        data = self.read_raw_data()
+        accel, gyro = data['accel'], data['gyro']
 
-        # x = self.read_word(X_MSB)
-        # y = self.read_word(Y_MSB)
-        # z = self.read_word(Z_MSB)
+        # Calculate roll and pitch from accelerometer
+        roll = math.atan2(accel[1], accel[2])
+        pitch = math.atan2(-accel[0], math.sqrt(accel[1]**2 + accel[2]**2))
 
-        heading = np.arctan2(y, x) * (180 / np.pi)  # Convert to degrees
+        # Predict
+        self.kf.F[0, 3] = -dt * math.sin(self.kf.x[1])
+        self.kf.F[1, 3] = dt * math.cos(self.kf.x[1]) * math.sin(self.kf.x[0])
+        self.kf.F[2, 3] = dt * math.cos(self.kf.x[1]) * math.cos(self.kf.x[0])
+        self.kf.predict()
 
-        if heading < 0:
-            heading += 360
+        # Update
+        z = np.array([roll, pitch, self.kf.x[2] + gyro[2]*dt, gyro[2], accel[0], accel[1]])
+        self.kf.update(z)
 
-        return heading
+        self.current_yaw = self.kf.x[2]
+        return self.current_yaw
 
-# def adjust_course(self, target_heading: float, motor, servo) -> None:
-#     """ Adjust the car's course to maintain the target heading """
-#     current_heading = self.read_magnetometer()
-#     print(f"Current Heading: {current_heading}°")
+    def set_target_yaw(self, target):
+        self.target_yaw = target
 
-#     error = target_heading - current_heading
-
-#     # Adjust the steering angle based on the error
-#     if error > 180:
-#         error -= 360
-#     elif error < -180:
-#         error += 360
-
-#     # Simple proportional controller (P-Control)
-#     steering_adjustment = error * 0.1  # Proportional gain (adjust as necessary)
-
-#     if steering_adjustment > 20:
-#         steering_adjustment = 20
-#     elif steering_adjustment < -20:
-#         steering_adjustment = -20
-
-#     servo.angle = steering_adjustment
-
-#     # Set motor speed forward (adjust as necessary)
-#     motor.forward(0.5)  # 50% PWM
+    def get_steering_adjustment(self):
+        error = self.target_yaw - self.current_yaw
+        # Normalize error to [-pi, pi]
+        error = (error + np.pi) % (2 * np.pi) - np.pi
+        return error * 5  # Proportional control, adjust gain as needed
