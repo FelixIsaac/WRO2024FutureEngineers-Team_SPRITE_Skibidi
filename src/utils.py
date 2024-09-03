@@ -65,3 +65,18 @@ def getRedBounds():
     print("Upper Bound 1:", upper_bound1)
     print("Lower Bound 2:", lower_bound2)
     print("Upper Bound 2:", upper_bound2)
+
+
+def soft_start(motor, start=0.0, end=1.0, step=0.1, delay=0.1):
+    pwm_value = start
+    while pwm_value <= end:
+        motor.forward(pwm_value)
+        time.sleep(delay)
+        pwm_value += step
+
+def soft_stop(motor, start=1.0, end=0.0, step=0.1, delay=0.1):
+    pwm_value = start
+    while pwm_value >= end:
+        motor.forward(pwm_value)
+        time.sleep(delay)
+        pwm_value -= step
