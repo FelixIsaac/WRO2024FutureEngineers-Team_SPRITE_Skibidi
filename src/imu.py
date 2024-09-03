@@ -50,6 +50,17 @@ class IMU:
             # Wake up the MPU6050
             bus.write_byte_data(self.address, PWR_MGMT_1, 0)
 
+            CONFIG_A = 0x00
+            CONFIG_B = 0x01
+            MODE = 0x02
+            X_MSB = 0x03
+            Z_MSB = 0x05
+            Y_MSB = 0x07
+
+            bus.write_byte_data(self.address, CONFIG_A, 0x70)  # Set to 8 samples @ 15Hz
+            bus.write_byte_data(self.address, CONFIG_B, 0x20)  # 1.3 gain LSb / Gauss 1090 (default)
+            bus.write_byte_data(self.address, MODE, 0x00)  # Continuous measurement mode
+
     def read_word(self, reg: hex) -> int:
         with SMBus(self.bus) as bus:
             high = bus.read_byte_data(self.address, reg)
