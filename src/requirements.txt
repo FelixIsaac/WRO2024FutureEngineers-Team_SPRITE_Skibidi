@@ -1,14 +1,16 @@
-RPi.GPIO==0.7.1
-gpiozero==2.0.1
-smbus2==0.4.2
-
 # numpy and scipy needed for filterpy
 # if cannot install filterpy, download the .tar.gz from their GitHub repo
 # extract the downloaded archive and do "python setup.py install --user"
-numpy==1.25.2
-scipy==1.11.2
 filterpy==1.4.5
+numpy==1.24.2
+scipy==1.11.2
 
 # for computer vision https://datasheets.raspberrypi.com/camera/picamera2-manual.pdf
-cv2==4.5.1
-picamera2==0.3.12
+opencv_python==4.10.0.84
+opencv_python_headless==4.10.0.84
+picamera2==0.3.18
+picamera2==0.3.19
+
+RPi.GPIO==0.7.1a4
+gpiozero==2.0.1
+smbus2==0.4.3
