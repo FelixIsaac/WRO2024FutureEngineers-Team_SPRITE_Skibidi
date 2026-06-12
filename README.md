@@ -1,3 +1,8 @@
+> [!NOTE]
+> **📦 Archived — no longer maintained.**
+> Competition entry for WRO 2024 Future Engineers: a self-driving car built in ~10 weeks on a Raspberry Pi with a global-shutter camera, ultrasonic sensors, and an IMU — the team got it driving and submitted. The competition's done, the car's retired, and there's nothing left to iterate on.
+> _Revisit if: honestly unlikely — kept as a record._
+
 # About WRO 2024 FE Team Skibidi (SP Robotics)
 
 This repository contains engineering materials of a self-driven vehicle's model participating in the [World Olympiad Robots](https://wro-association.org/)[Future Engineers competition](https://wro-association.org/wp-content/uploads/WRO-2024-Future-Engineers-Self-Driving-Cars-General-Rules.pdf) in the 2024 season. This includes the source code, 3D CAD models and drawings, and team photos and vechical photos. 
